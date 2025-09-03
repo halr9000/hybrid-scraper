@@ -18,7 +18,6 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/halr9000/hybrid-scraper"
 Repository = "https://github.com/halr9000/hybrid-scraper"
 
 [project.scripts]

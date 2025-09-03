@@ -21,12 +21,13 @@ from urllib.parse import urlparse
 
 
 class HybridScraper:
-    def __init__(self, debug_html: bool = False, start_url: str | None = None, start_watch: bool = False, output_dir: str = "output"):
+    def __init__(self, debug_html: bool = False, start_url: str | None = None, start_watch: bool = False, output_dir: str = "output", verbose: bool = False):
         self.driver = None
         self.debug_html = debug_html
         self.start_url = start_url
         self.start_watch = start_watch
         self.output_dir = Path(output_dir)
+        self.verbose = verbose
 
         # Configure html2text converter
         self.h = html2text.HTML2Text()
@@ -41,16 +42,22 @@ class HybridScraper:
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window-size=1400,1000')
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        # Reduce noisy Chrome/Chromedriver logging to STDERR
-        chrome_options.add_argument('--log-level=3')  # 0=INFO,1=WARNING,2=ERROR,3=FATAL
-        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        if not self.verbose:
+            # Reduce noisy Chrome/Chromedriver logging to STDERR
+            chrome_options.add_argument('--log-level=3')  # 0=INFO,1=WARNING,2=ERROR,3=FATAL
+            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
-        # Suppress TensorFlow/absl logs if any dependencies trigger them
-        os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 0=all,1=warn,2=error,3=fatal
-        logging.getLogger('absl').setLevel(logging.ERROR)
+            # Suppress TensorFlow/absl logs if any dependencies trigger them
+            os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 0=all,1=warn,2=error,3=fatal
+            logging.getLogger('absl').setLevel(logging.ERROR)
 
-        # Send ChromeDriver logs to DEVNULL to avoid console noise
-        service = Service(ChromeDriverManager().install(), log_output=subprocess.DEVNULL)
+            # Send ChromeDriver logs to DEVNULL to avoid console noise
+            service = Service(ChromeDriverManager().install(), log_output=subprocess.DEVNULL)
+        else:
+            # Verbose mode: show normal logs
+            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+            logging.getLogger('absl').setLevel(logging.INFO)
+            service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
 
         print("🌐 Browser opened - ready for manual navigation!")
@@ -377,9 +384,10 @@ def main() -> None:
     parser.add_argument("--debug-html", dest="debug_html", help="Also save raw HTML next to Markdown", action="store_true")
     parser.add_argument("--watch", dest="watch", help="Start in watch mode (auto-capture on navigation)", action="store_true")
     parser.add_argument("--output-dir", dest="output_dir", help="Directory to save output (default: 'output')", default="output")
+    parser.add_argument("--verbose", dest="verbose", help="Show verbose logs (Chrome/Driver/TF)", action="store_true")
     args = parser.parse_args()
 
-    scraper = HybridScraper(debug_html=args.debug_html, start_url=args.url, start_watch=args.watch, output_dir=args.output_dir)
+    scraper = HybridScraper(debug_html=args.debug_html, start_url=args.url, start_watch=args.watch, output_dir=args.output_dir, verbose=args.verbose)
     scraper.start_session()
 
 
