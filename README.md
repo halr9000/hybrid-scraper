@@ -44,58 +44,71 @@ uv venv
 uv pip install -r requirements.txt
 
 # (optional) Run through uv
-uv run python hybrid-scraper.py
+uv run python -m hybrid_scraper
 ```
 
 ### Option C: uvx quick run (no local venv)
 
-Runs in an ephemeral environment with required packages.
+Run directly from GitHub via console script (ephemeral env):
 
 ```bash
-uvx \
-  --with selenium \
-  --with webdriver-manager \
-  --with beautifulsoup4 \
-  --with html2text \
-  python hybrid-scraper.py --url "https://example.com"
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git \
+  hybrid-scraper --url "https://example.com"
 ```
 
 ## Usage
 
 Basic run (interactive prompts):
 ```bash
-python hybrid-scraper.py
+python -m hybrid_scraper
 ```
 
 Start at a specific URL:
 ```bash
-python hybrid-scraper.py --url "https://example.com"
+python -m hybrid_scraper --url "https://example.com"
+```
+
+Run directly via uvx from GitHub (no clone):
+```bash
+# Latest default branch
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git hybrid-scraper --url "https://example.com"
+
+# Pin a tag or branch
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git@v0.1.0 hybrid-scraper
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git@main hybrid-scraper
+
+# Pin a specific commit
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git@<commit-sha> hybrid-scraper
+
+# Change output directory, enable debug HTML, or watch mode
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git \
+  hybrid-scraper --output-dir scraped --debug-html --watch
 ```
 
 Choose output directory (default is `output/`):
 ```bash
 # Use default: saves to output/<domain>/
-python hybrid-scraper.py
+python -m hybrid_scraper
 
 # Custom folder (e.g., scraped/): saves to scraped/<domain>/
-python hybrid-scraper.py --output-dir scraped
+python -m hybrid_scraper --output-dir scraped
 
 # Combine with other options
-python hybrid-scraper.py --url "https://example.com" --watch --debug-html --output-dir scraped
+python -m hybrid_scraper --url "https://example.com" --watch --debug-html --output-dir scraped
 ```
 
 Also save raw HTML next to Markdown:
 ```bash
-python hybrid-scraper.py --debug-html
+python -m hybrid_scraper --debug-html
 ```
 
 Start directly in true auto-capture watch mode:
 ```bash
-python hybrid-scraper.py --watch
+python -m hybrid_scraper --watch
 ```
 You can combine with a starting URL:
 ```bash
-python hybrid-scraper.py --watch --url "https://example.com"
+python -m hybrid_scraper --watch --url "https://example.com"
 ```
 
 ## Commands (inside the app)
@@ -115,11 +128,7 @@ python hybrid-scraper.py --watch --url "https://example.com"
 
 ## VS Code Debugging
 
-This repo includes a `.vscode/launch.json` with:
-- "Run hybrid-scraper" – runs the script normally
-- "Run with URL" – lets you type or set a starting URL
-
-You can edit arguments in the debug configuration to set `--url` and `--debug-html`.
+This repo includes a `.vscode/launch.json` with launch profiles. If you prefer running as a module, set the program to `-m` and the module to `hybrid_scraper`, and place arguments (e.g., `--url`, `--debug-html`) in the args field.
 
 ## Notes
 

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hybrid-scraper"
+version = "0.1.0"
+description = "Hybrid Page Scraper: manual navigation + automated content capture"
+readme = "README.md"
+authors = [{ name = "Hal", email = "" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  "selenium>=4.0.0",
+  "webdriver-manager>=4.0.0",
+  "beautifulsoup4>=4.12.0",
+  "html2text>=2020.1.16",
+]
+
+[project.urls]
+Homepage = "https://github.com/halr9000/hybrid-scraper"
+Repository = "https://github.com/halr9000/hybrid-scraper"
+
+[project.scripts]
+# Provides a console command `hybrid-scraper`
+"hybrid-scraper" = "hybrid_scraper:main"

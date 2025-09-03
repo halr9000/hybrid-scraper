@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Hybrid Page Scraper
-Human does the navigation, script does the content extraction.
-Perfect for sites with JavaScript routing issues!
+Hybrid Page Scraper (module entrypoint)
+This module defines `main()` for console script execution and mirrors the behavior of hybrid-scraper.py.
 """
 
 import html2text
@@ -17,6 +16,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 from urllib.parse import urlparse
 
+
 class HybridScraper:
     def __init__(self, debug_html: bool = False, start_url: str | None = None, start_watch: bool = False, output_dir: str = "output"):
         self.driver = None
@@ -24,7 +24,7 @@ class HybridScraper:
         self.start_url = start_url
         self.start_watch = start_watch
         self.output_dir = Path(output_dir)
-        
+
         # Configure html2text converter
         self.h = html2text.HTML2Text()
         self.h.ignore_links = False
@@ -38,13 +38,13 @@ class HybridScraper:
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window-size=1400,1000')
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        
+
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
-        
+
         print("🌐 Browser opened - ready for manual navigation!")
         return self.driver
-    
+
     def start_session(self):
         """Start the hybrid scraping session."""
         print("🚀 Hybrid Page Scraper")
@@ -55,11 +55,11 @@ class HybridScraper:
         print("3. Use commands here to capture content")
         print(f"4. Content is saved under '{self.output_dir}/<domain>/' in this folder")
         print("=" * 50)
-        
+
         try:
             # Setup browser
             self.setup_browser()
-            
+
             # Optional: navigate to a starting URL
             if self.start_url is None:
                 entered = input("Enter a URL to open (or press Enter to skip): ").strip()
@@ -70,13 +70,13 @@ class HybridScraper:
                 self.driver.get(self.start_url)
                 time.sleep(2)
                 print("✅ Initial page loaded")
-            
+
             # Start session in selected mode
             if self.start_watch:
                 self.auto_watch_navigation()
             else:
                 self.interactive_session()
-            
+
         except KeyboardInterrupt:
             print("\n👋 Session interrupted by user")
         except Exception as e:
@@ -85,25 +85,25 @@ class HybridScraper:
             if self.driver:
                 self.driver.quit()
                 print("🔒 Browser closed")
-    
+
     def interactive_session(self):
         """Main interactive session loop."""
         print("\n🎮 INTERACTIVE MODE STARTED")
         print("-" * 30)
         self.show_help()
-        
+
         while True:
             try:
                 # Get current page info
                 current_url = self.driver.current_url
                 page_title = self.driver.title
-                
+
                 print(f"\n📍 Current: {page_title}")
                 print(f"🔗 URL: {current_url}")
-                
+
                 # Get user command
                 cmd = input("\n⌨️  Command (help/capture/auto/watch/quit): ").strip().lower()
-                
+
                 if cmd in ['q', 'quit', 'exit']:
                     break
                 elif cmd in ['h', 'help']:
@@ -119,12 +119,12 @@ class HybridScraper:
                 else:
                     print(f"❓ Unknown command: {cmd}")
                     self.show_help()
-                    
+
             except KeyboardInterrupt:
                 break
-        
+
         print("👋 Interactive session ended")
-    
+
     def show_help(self):
         """Show available commands."""
         print("\n📋 AVAILABLE COMMANDS:")
@@ -134,27 +134,27 @@ class HybridScraper:
         print("  help (h)    - Show this help")
         print("  quit (q)    - Exit the scraper")
         print("\n💡 TIP: Navigate to any page, then use 'capture' to save it!")
-    
+
     def capture_current_page(self):
         """Capture the current page content."""
         try:
             # Get current page info
             current_url = self.driver.current_url
             page_title = self.driver.title
-            
+
             print(f"\n📸 Capturing: {page_title}")
-            
+
             # Get page source
             html_source = self.driver.page_source
             print(f"📄 Captured {len(html_source)} characters")
-            
+
             # Process and save
             title = self.detect_title(current_url, page_title)
             self.process_and_save(html_source, title, current_url)
-            
+
         except Exception as e:
             print(f"❌ Capture failed: {e}")
-    
+
     def auto_capture_all(self):
         """Auto-capture mode - you navigate, script captures."""
         print("\n🔄 AUTO-CAPTURE MODE")
@@ -163,34 +163,34 @@ class HybridScraper:
         print("Press Enter after each page loads to capture it.")
         print("Type 'done' when finished.")
         print("")
-        
+
         captured_count = 0
-        
+
         while True:
             current_url = self.driver.current_url
             page_title = self.driver.title
-            
+
             print(f"📍 Ready to capture: {page_title}")
             cmd = input("Press Enter to capture, or 'done' to finish: ").strip().lower()
-            
+
             if cmd == 'done':
                 break
             elif cmd == '':
                 try:
                     # Determine title
                     title = self.detect_title(current_url, page_title)
-                    
+
                     # Capture content
                     html_source = self.driver.page_source
                     self.process_and_save(html_source, title, current_url)
                     captured_count += 1
-                    
+
                     print(f"✅ Captured! ({captured_count} total)")
                     print("👆 Navigate to next page...")
-                    
+
                 except Exception as e:
                     print(f"❌ Capture failed: {e}")
-        
+
         print(f"\n🎉 Auto-capture completed! Saved {captured_count} pages.")
 
     def auto_watch_navigation(self, debounce_seconds: float = 1.5, same_url_cooldown: float = 10.0, poll_interval: float = 0.5):
@@ -228,7 +228,7 @@ class HybridScraper:
                 if url != last_seen_url:
                     last_seen_url = url
                     last_seen_time = now
-                
+
                 stable_for = now - last_seen_time
 
                 # Determine if eligible to capture
@@ -254,7 +254,7 @@ class HybridScraper:
                 time.sleep(poll_interval)
         except KeyboardInterrupt:
             print(f"\n🛑 Watch mode stopped. Saved {captured_count} pages in this session.")
-    
+
     def detect_title(self, url, title):
         """Determine a reasonable title for the page."""
         # Prefer the browser's page title when available
@@ -270,24 +270,24 @@ class HybridScraper:
             return last or f"unknown-{int(time.time())}"
         except Exception:
             return f"unknown-{int(time.time())}"
-    
+
     def process_and_save(self, html_source, title, url):
         """Process HTML and save as markdown."""
         try:
             # Parse HTML
             soup = BeautifulSoup(html_source, 'html.parser')
-            
+
             # Remove unwanted elements
             for element in soup.select('script, style, .v-navigation-drawer, .v-app-bar, .v-footer, nav, header, footer'):
                 element.decompose()
-            
+
             # Find main content
             main_content = soup.select_one('main')
             if not main_content:
                 main_content = soup.select_one('#app')
             if not main_content:
                 main_content = soup.find('body')
-            
+
             # Capture meta descriptions if present
             meta_desc = None
             # Standard meta description
@@ -299,12 +299,12 @@ class HybridScraper:
                 tag = soup.find('meta', attrs={'property': 'og:description'})
                 if tag and tag.get('content'):
                     meta_desc = tag.get('content').strip()
-            
+
             # Convert to markdown
             markdown = self.h.handle(str(main_content))
             markdown = re.sub(r'\n{3,}', '\n\n', markdown)
             markdown = markdown.strip()
-            
+
             # Create header
             header = f"# {title}\n\n"
             header += f"*Source: {url}*\n\n"
@@ -313,9 +313,9 @@ class HybridScraper:
             if meta_desc:
                 header += f"*Meta description: {meta_desc}*\n\n"
             header += "---\n\n"
-            
+
             final_content = header + markdown
-            
+
             # Create safe paths (domain subfolder inside output dir)
             parsed = urlparse(url)
             domain = parsed.netloc or "unknown-domain"
@@ -332,21 +332,21 @@ class HybridScraper:
             safe_name = re.sub(r'[<>:"/\\|?*]', '', title.lower())
             safe_name = re.sub(r'[^\w\-_.]', '-', safe_name)
             filename = base_dir / f"{safe_name}.md"
-            
+
             # Save file
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(final_content)
-            
+
             # Optionally save debug HTML
             if self.debug_html:
                 debug_filename = base_dir / f"debug-{safe_name}.html"
                 with open(debug_filename, 'w', encoding='utf-8') as f:
                     f.write(html_source)
-            
+
             print(f"💾 Saved: {filename} ({len(final_content)} characters)")
             if self.debug_html:
                 print(f"🔍 Debug: {debug_filename}")
-            
+
             # Show content preview
             lines = final_content.split('\n')[:10]
             print("\n📖 CONTENT PREVIEW:")
@@ -355,11 +355,12 @@ class HybridScraper:
                     print(f"   {i:2d}| {line[:70]}{'...' if len(line) > 70 else ''}")
             if len(lines) >= 10:
                 print("   ...and more")
-            
+
         except Exception as e:
             print(f"❌ Processing failed: {e}")
 
-if __name__ == "__main__":
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Page Scraper: manual navigation + automated content capture")
     parser.add_argument("--url", dest="url", help="Optional starting URL to open", default=None)
     parser.add_argument("--debug-html", dest="debug_html", help="Also save raw HTML next to Markdown", action="store_true")
@@ -369,3 +370,7 @@ if __name__ == "__main__":
 
     scraper = HybridScraper(debug_html=args.debug_html, start_url=args.url, start_watch=args.watch, output_dir=args.output_dir)
     scraper.start_session()
+
+
+if __name__ == "__main__":
+    main()
