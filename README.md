@@ -10,6 +10,25 @@ Perfect for sites with JavaScript routing issues.
 - Converts page content to Markdown using `html2text`
 - Optional raw HTML debug output
 
+## Quickstart (preferred): Run via uvx
+
+Run directly from GitHub in an ephemeral environment (no clone needed):
+
+```bash
+# Latest default branch
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git \
+  hybrid-scraper --url "https://example.com"
+
+# Pin a tag, branch, or commit
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git@v0.1.0 hybrid-scraper
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git@main hybrid-scraper
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git@<commit-sha> hybrid-scraper
+
+# Change output dir, enable debug HTML, and watch mode
+uvx --from git+https://github.com/halr9000/hybrid-scraper.git \
+  hybrid-scraper --output-dir scraped --debug-html --watch
+```
+
 ## Requirements
 
 - Python 3.10+
@@ -21,11 +40,11 @@ The script uses these Python packages:
 - `beautifulsoup4`
 - `html2text`
 
-## Installation
+## Development setup
 
-Use any of the following options.
+Set up a local development environment using either pip or uv.
 
-### Option A: pip + virtualenv (recommended)
+### Option A: pip + virtualenv
 
 ```bash
 python -m venv .venv
@@ -47,16 +66,7 @@ uv pip install -r requirements.txt
 uv run python -m hybrid_scraper
 ```
 
-### Option C: uvx quick run (no local venv)
-
-Run directly from GitHub via console script (ephemeral env):
-
-```bash
-uvx --from git+https://github.com/halr9000/hybrid-scraper.git \
-  hybrid-scraper --url "https://example.com"
-```
-
-## Usage
+## Usage (local module)
 
 Basic run (interactive prompts):
 ```bash
@@ -66,23 +76,6 @@ python -m hybrid_scraper
 Start at a specific URL:
 ```bash
 python -m hybrid_scraper --url "https://example.com"
-```
-
-Run directly via uvx from GitHub (no clone):
-```bash
-# Latest default branch
-uvx --from git+https://github.com/halr9000/hybrid-scraper.git hybrid-scraper --url "https://example.com"
-
-# Pin a tag or branch
-uvx --from git+https://github.com/halr9000/hybrid-scraper.git@v0.1.0 hybrid-scraper
-uvx --from git+https://github.com/halr9000/hybrid-scraper.git@main hybrid-scraper
-
-# Pin a specific commit
-uvx --from git+https://github.com/halr9000/hybrid-scraper.git@<commit-sha> hybrid-scraper
-
-# Change output directory, enable debug HTML, or watch mode
-uvx --from git+https://github.com/halr9000/hybrid-scraper.git \
-  hybrid-scraper --output-dir scraped --debug-html --watch
 ```
 
 Choose output directory (default is `output/`):
