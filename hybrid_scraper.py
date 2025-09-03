@@ -8,6 +8,9 @@ import html2text
 import time
 import re
 import argparse
+import os
+import subprocess
+import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -38,8 +41,16 @@ class HybridScraper:
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window-size=1400,1000')
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        # Reduce noisy Chrome/Chromedriver logging to STDERR
+        chrome_options.add_argument('--log-level=3')  # 0=INFO,1=WARNING,2=ERROR,3=FATAL
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
-        service = Service(ChromeDriverManager().install())
+        # Suppress TensorFlow/absl logs if any dependencies trigger them
+        os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 0=all,1=warn,2=error,3=fatal
+        logging.getLogger('absl').setLevel(logging.ERROR)
+
+        # Send ChromeDriver logs to DEVNULL to avoid console noise
+        service = Service(ChromeDriverManager().install(), log_output=subprocess.DEVNULL)
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
 
         print("🌐 Browser opened - ready for manual navigation!")

@@ -9,6 +9,7 @@ Perfect for sites with JavaScript routing issues.
 - Capture current page, semi-auto capture, or true auto capture on navigation
 - Converts page content to Markdown using `html2text`
 - Optional raw HTML debug output
+- Quiet by default: suppresses noisy Chrome/Chromedriver and TensorFlow/absl logs
 
 ## Quickstart (preferred): Run via uvx
 
@@ -127,3 +128,25 @@ This repo includes a `.vscode/launch.json` with launch profiles. If you prefer r
 
 - ChromeDriver is auto-managed by `webdriver-manager`.
 - If Chrome auto-updates and you hit driver mismatch issues, rerun and it will re-download.
+
+## Logging (quiet by default)
+
+To keep the console clean, the scraper suppresses common noisy logs by default:
+
+- Chrome/Chromedriver logs are minimized via `--log-level=3` and disabled `enable-logging` switch.
+- ChromeDriver service output is routed to `DEVNULL`.
+- TensorFlow/absl messages are reduced by setting `TF_CPP_MIN_LOG_LEVEL=2` and `absl` logger to ERROR.
+
+If you need verbose output for debugging:
+
+- Temporarily edit `hybrid_scraper.py` in `setup_browser()` to remove the quieting options, or
+- Set environment before running (may not show everything, but helps):
+  - On PowerShell (Windows):
+    ```powershell
+    $env:TF_CPP_MIN_LOG_LEVEL = "0"  # show TF info/warnings
+    python -m hybrid_scraper
+    ```
+  - On Bash:
+    ```bash
+    TF_CPP_MIN_LOG_LEVEL=0 python -m hybrid_scraper
+    ```
