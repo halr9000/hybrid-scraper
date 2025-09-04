@@ -14,6 +14,7 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import WebDriverException, InvalidSessionIdException, NoSuchWindowException
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from pathlib import Path
@@ -63,6 +64,17 @@ class HybridScraper:
         print("🌐 Browser opened - ready for manual navigation!")
         return self.driver
 
+    def _is_browser_alive(self) -> bool:
+        """Best-effort check if the browser session is still alive."""
+        try:
+            if not self.driver:
+                return False
+            # Access a lightweight property to trigger session validation
+            _ = self.driver.title
+            return True
+        except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+            return False
+
     def start_session(self):
         """Start the hybrid scraping session."""
         print("🚀 Hybrid Page Scraper")
@@ -97,12 +109,20 @@ class HybridScraper:
 
         except KeyboardInterrupt:
             print("\n👋 Session interrupted by user")
+        except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+            print("🔒 Browser closed")
         except Exception as e:
-            print(f"❌ Error: {e}")
+            # Keep error concise without Selenium's long embedded stacktrace
+            print(f"❌ Error: {e.__class__.__name__}: {e}")
         finally:
             if self.driver:
-                self.driver.quit()
-                print("🔒 Browser closed")
+                try:
+                    if self._is_browser_alive():
+                        self.driver.quit()
+                except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+                    pass
+                finally:
+                    print("🔒 Browser closed")
 
     def interactive_session(self):
         """Main interactive session loop."""
@@ -113,8 +133,12 @@ class HybridScraper:
         while True:
             try:
                 # Get current page info
-                current_url = self.driver.current_url
-                page_title = self.driver.title
+                try:
+                    current_url = self.driver.current_url
+                    page_title = self.driver.title
+                except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+                    print("🔒 Browser closed")
+                    break
 
                 print(f"\n📍 Current: {page_title}")
                 print(f"🔗 URL: {current_url}")
@@ -170,8 +194,10 @@ class HybridScraper:
             title = self.detect_title(current_url, page_title)
             self.process_and_save(html_source, title, current_url)
 
+        except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+            print("🔒 Browser closed")
         except Exception as e:
-            print(f"❌ Capture failed: {e}")
+            print(f"❌ Capture failed: {e.__class__.__name__}: {e}")
 
     def auto_capture_all(self):
         """Auto-capture mode - you navigate, script captures."""
@@ -185,8 +211,12 @@ class HybridScraper:
         captured_count = 0
 
         while True:
-            current_url = self.driver.current_url
-            page_title = self.driver.title
+            try:
+                current_url = self.driver.current_url
+                page_title = self.driver.title
+            except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+                print("🔒 Browser closed")
+                break
 
             print(f"📍 Ready to capture: {page_title}")
             cmd = input("Press Enter to capture, or 'done' to finish: ").strip().lower()
@@ -206,8 +236,11 @@ class HybridScraper:
                     print(f"✅ Captured! ({captured_count} total)")
                     print("👆 Navigate to next page...")
 
+                except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+                    print("🔒 Browser closed")
+                    break
                 except Exception as e:
-                    print(f"❌ Capture failed: {e}")
+                    print(f"❌ Capture failed: {e.__class__.__name__}: {e}")
 
         print(f"\n🎉 Auto-capture completed! Saved {captured_count} pages.")
 
@@ -231,8 +264,12 @@ class HybridScraper:
 
         try:
             while True:
-                url = self.driver.current_url
-                title = self.driver.title
+                try:
+                    url = self.driver.current_url
+                    title = self.driver.title
+                except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+                    print("🔒 Browser closed")
+                    break
 
                 # Check if the page is fully loaded to reduce partial captures
                 try:
@@ -263,8 +300,11 @@ class HybridScraper:
                         last_captured_time_by_url[url] = now
                         captured_count += 1
                         print(f"✅ Auto-captured ({captured_count} total)")
+                    except (InvalidSessionIdException, NoSuchWindowException, WebDriverException):
+                        print("🔒 Browser closed")
+                        break
                     except Exception as e:
-                        print(f"❌ Auto-capture failed: {e}")
+                        print(f"❌ Auto-capture failed: {e.__class__.__name__}: {e}")
 
                     # After capture, wait a short grace period before checking again
                     time.sleep(max(poll_interval, 0.25))
@@ -386,6 +426,15 @@ def main() -> None:
     parser.add_argument("--output-dir", dest="output_dir", help="Directory to save output (default: 'output')", default="output")
     parser.add_argument("--verbose", dest="verbose", help="Show verbose logs (Chrome/Driver/TF)", action="store_true")
     args = parser.parse_args()
+
+    # Validate --url: if provided, require an explicit http(s) scheme.
+    # Exit early (no browser) if the value is missing or not an http/https URL.
+    if args.url is not None:
+        url_val = (args.url or "").strip()
+        if not url_val.lower().startswith(("http://", "https://")):
+            print("❗ --url must start with http:// or https://\n")
+            parser.print_help()
+            return
 
     scraper = HybridScraper(debug_html=args.debug_html, start_url=args.url, start_watch=args.watch, output_dir=args.output_dir, verbose=args.verbose)
     scraper.start_session()
