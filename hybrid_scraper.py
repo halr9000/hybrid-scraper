@@ -11,24 +11,83 @@ import argparse
 import os
 import subprocess
 import logging
+from functools import lru_cache
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import WebDriverException, InvalidSessionIdException, NoSuchWindowException
+from selenium.common.exceptions import WebDriverException, InvalidSessionIdException, NoSuchWindowException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from pathlib import Path
 from urllib.parse import urlparse
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_cached_chromedriver_path() -> str:
+    """Cache ChromeDriver installation to avoid repeated downloads."""
+    try:
+        driver_path = ChromeDriverManager().install()
+        logger.info(f"ChromeDriver cached at: {driver_path}")
+        return driver_path
+    except Exception as e:
+        logger.error(f"Failed to install ChromeDriver: {e}")
+        raise
+
+
+class ScraperConfig:
+    """Configuration class for the hybrid scraper."""
+    
+    def __init__(self):
+        # Browser settings
+        self.window_size = "1400,1000"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        
+        # Content processing settings
+        self.max_filename_length = 100
+        self.file_buffer_size = 8192
+        self.content_preview_lines = 10
+        self.content_preview_width = 70
+        
+        # Watch mode settings
+        self.default_debounce_seconds = 1.5
+        self.default_same_url_cooldown = 10.0
+        self.default_poll_interval = 0.5
+        self.min_poll_interval = 0.25
+        
+        # Content extraction selectors
+        self.unwanted_selectors = [
+            'script', 'style', 'noscript',
+            '.v-navigation-drawer', '.v-app-bar', '.v-footer',
+            'nav', 'header', 'footer',
+            '[role="banner"]', '[role="navigation"]', '[role="contentinfo"]',
+            '.advertisement', '.ads', '.sidebar'
+        ]
+        
+        self.main_content_selectors = [
+            'main',
+            '[role="main"]',
+            '#main',
+            '.main-content',
+            '#content',
+            '.content',
+            '#app',
+            'body'
+        ]
+
 
 class HybridScraper:
-    def __init__(self, debug_html: bool = False, start_url: str | None = None, start_watch: bool = False, output_dir: str = "output", verbose: bool = False):
+    def __init__(self, debug_html: bool = False, start_url: str | None = None, start_watch: bool = False, output_dir: str = "output", verbose: bool = False, config: ScraperConfig | None = None):
         self.driver = None
         self.debug_html = debug_html
         self.start_url = start_url
         self.start_watch = start_watch
         self.output_dir = Path(output_dir)
         self.verbose = verbose
+        self.config = config or ScraperConfig()
 
         # Configure html2text converter
         self.h = html2text.HTML2Text()
@@ -38,31 +97,41 @@ class HybridScraper:
 
     def setup_browser(self):
         """Set up a visible Chrome browser for human interaction."""
-        chrome_options = Options()
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--window-size=1400,1000')
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        if not self.verbose:
-            # Reduce noisy Chrome/Chromedriver logging to STDERR
-            chrome_options.add_argument('--log-level=3')  # 0=INFO,1=WARNING,2=ERROR,3=FATAL
-            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        try:
+            chrome_options = Options()
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument(f'--window-size={self.config.window_size}')
+            chrome_options.add_argument(f'--user-agent={self.config.user_agent}')
+            
+            # Use cached ChromeDriver path
+            driver_path = get_cached_chromedriver_path()
+            
+            if not self.verbose:
+                # Reduce noisy Chrome/Chromedriver logging to STDERR
+                chrome_options.add_argument('--log-level=3')  # 0=INFO,1=WARNING,2=ERROR,3=FATAL
+                chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
-            # Suppress TensorFlow/absl logs if any dependencies trigger them
-            os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 0=all,1=warn,2=error,3=fatal
-            logging.getLogger('absl').setLevel(logging.ERROR)
+                # Suppress TensorFlow/absl logs if any dependencies trigger them
+                os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')  # 0=all,1=warn,2=error,3=fatal
+                logging.getLogger('absl').setLevel(logging.ERROR)
 
-            # Send ChromeDriver logs to DEVNULL to avoid console noise
-            service = Service(ChromeDriverManager().install(), log_output=subprocess.DEVNULL)
-        else:
-            # Verbose mode: show normal logs
-            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
-            logging.getLogger('absl').setLevel(logging.INFO)
-            service = Service(ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        print("🌐 Browser opened - ready for manual navigation!")
-        return self.driver
+                # Send ChromeDriver logs to DEVNULL to avoid console noise
+                service = Service(driver_path, log_output=subprocess.DEVNULL)
+            else:
+                # Verbose mode: show normal logs
+                os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+                logging.getLogger('absl').setLevel(logging.INFO)
+                service = Service(driver_path)
+                
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            logger.info("Browser setup completed successfully")
+            print("🌐 Browser opened - ready for manual navigation!")
+            return self.driver
+            
+        except Exception as e:
+            logger.error(f"Failed to setup browser: {e}")
+            raise WebDriverException(f"Browser setup failed: {e}")
 
     def _is_browser_alive(self) -> bool:
         """Best-effort check if the browser session is still alive."""
@@ -244,13 +313,18 @@ class HybridScraper:
 
         print(f"\n🎉 Auto-capture completed! Saved {captured_count} pages.")
 
-    def auto_watch_navigation(self, debounce_seconds: float = 1.5, same_url_cooldown: float = 10.0, poll_interval: float = 0.5):
+    def auto_watch_navigation(self, debounce_seconds: float | None = None, same_url_cooldown: float | None = None, poll_interval: float | None = None):
         """True auto-capture: watches for navigation changes and captures automatically.
 
         - Debounce: waits for the URL to remain stable for `debounce_seconds`.
         - Duplicate filter: won't recapture the same URL within `same_url_cooldown` seconds.
         - Stop: press Ctrl+C to exit this mode and return to the main prompt.
         """
+        # Use configuration defaults if not provided
+        debounce_seconds = debounce_seconds or self.config.default_debounce_seconds
+        same_url_cooldown = same_url_cooldown or self.config.default_same_url_cooldown
+        poll_interval = poll_interval or self.config.default_poll_interval
+        
         print("\n🕵️ WATCH MODE (auto-capture on navigation)")
         print("-" * 20)
         print(f"Debounce: {debounce_seconds}s • Same-URL cooldown: {same_url_cooldown}s")
@@ -329,93 +403,159 @@ class HybridScraper:
         except Exception:
             return f"unknown-{int(time.time())}"
 
-    def process_and_save(self, html_source, title, url):
-        """Process HTML and save as markdown."""
+    def process_and_save(self, html_source: str, title: str, url: str) -> bool:
+        """Process HTML and save as markdown. Returns True if successful."""
         try:
-            # Parse HTML
-            soup = BeautifulSoup(html_source, 'html.parser')
+            logger.info(f"Processing page: {title} ({len(html_source)} chars)")
+            
+            # Parse HTML with error handling
+            try:
+                soup = BeautifulSoup(html_source, 'html.parser')
+            except Exception as e:
+                logger.error(f"HTML parsing failed: {e}")
+                return False
 
-            # Remove unwanted elements
-            for element in soup.select('script, style, .v-navigation-drawer, .v-app-bar, .v-footer, nav, header, footer'):
-                element.decompose()
+            # Remove unwanted elements using configuration
+            for selector in self.config.unwanted_selectors:
+                for element in soup.select(selector):
+                    element.decompose()
 
-            # Find main content
-            main_content = soup.select_one('main')
+            # Find main content using configuration selectors
+            main_content = None
+            for selector in self.config.main_content_selectors:
+                main_content = soup.select_one(selector)
+                if main_content:
+                    break
+
             if not main_content:
-                main_content = soup.select_one('#app')
-            if not main_content:
-                main_content = soup.find('body')
+                logger.warning("No main content found, using full document")
+                main_content = soup
 
-            # Capture meta descriptions if present
-            meta_desc = None
-            # Standard meta description
-            tag = soup.find('meta', attrs={'name': 'description'})
-            if tag and tag.get('content'):
-                meta_desc = tag.get('content').strip()
-            # OpenGraph description fallback
-            if not meta_desc:
-                tag = soup.find('meta', attrs={'property': 'og:description'})
-                if tag and tag.get('content'):
-                    meta_desc = tag.get('content').strip()
+            # Extract meta description more efficiently
+            meta_desc = self._extract_meta_description(soup)
 
             # Convert to markdown
-            markdown = self.h.handle(str(main_content))
-            markdown = re.sub(r'\n{3,}', '\n\n', markdown)
-            markdown = markdown.strip()
+            try:
+                markdown = self.h.handle(str(main_content))
+                markdown = re.sub(r'\n{3,}', '\n\n', markdown).strip()
+            except Exception as e:
+                logger.error(f"Markdown conversion failed: {e}")
+                return False
 
-            # Create header
-            header = f"# {title}\n\n"
-            header += f"*Source: {url}*\n\n"
-            header += f"*Scraped on: {time.strftime('%Y-%m-%d %H:%M:%S')}*\n\n"
-            header += f"*Content length: {len(markdown)} characters*\n\n"
-            if meta_desc:
-                header += f"*Meta description: {meta_desc}*\n\n"
-            header += "---\n\n"
+            # Create content with header
+            final_content = self._create_content_with_header(title, url, markdown, meta_desc)
 
-            final_content = header + markdown
+            # Create safe file paths
+            try:
+                base_dir, filename = self._create_safe_paths(url, title)
+            except Exception as e:
+                logger.error(f"Path creation failed: {e}")
+                return False
 
-            # Create safe paths (domain subfolder inside output dir)
-            parsed = urlparse(url)
-            domain = parsed.netloc or "unknown-domain"
-            # Normalize domain (strip common www.)
-            if domain.lower().startswith("www."):
-                domain = domain[4:]
-            # Sanitize domain for filesystem
-            safe_domain = re.sub(r'[^\w\-_.]', '-', domain.lower())
-
-            base_dir = (Path.cwd() / self.output_dir / safe_domain)
-            base_dir.mkdir(parents=True, exist_ok=True)
-
-            # Create safe filename
-            safe_name = re.sub(r'[<>:"/\\|?*]', '', title.lower())
-            safe_name = re.sub(r'[^\w\-_.]', '-', safe_name)
-            filename = base_dir / f"{safe_name}.md"
-
-            # Save file
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(final_content)
-
-            # Optionally save debug HTML
-            if self.debug_html:
-                debug_filename = base_dir / f"debug-{safe_name}.html"
-                with open(debug_filename, 'w', encoding='utf-8') as f:
-                    f.write(html_source)
-
-            print(f"💾 Saved: {filename} ({len(final_content)} characters)")
-            if self.debug_html:
-                print(f"🔍 Debug: {debug_filename}")
-
-            # Show content preview
-            lines = final_content.split('\n')[:10]
-            print("\n📖 CONTENT PREVIEW:")
-            for i, line in enumerate(lines, 1):
-                if line.strip():
-                    print(f"   {i:2d}| {line[:70]}{'...' if len(line) > 70 else ''}")
-            if len(lines) >= 10:
-                print("   ...and more")
+            # Save files efficiently
+            try:
+                self._save_files(final_content, html_source, base_dir, filename, title)
+                logger.info(f"Successfully saved: {filename}")
+                
+                # Show content preview
+                self._show_content_preview(final_content, filename)
+                return True
+                
+            except Exception as e:
+                logger.error(f"File saving failed: {e}")
+                return False
 
         except Exception as e:
+            logger.error(f"Processing failed: {e}")
             print(f"❌ Processing failed: {e}")
+            return False
+
+    def _extract_meta_description(self, soup: BeautifulSoup) -> str | None:
+        """Extract meta description from HTML."""
+        # Standard meta description
+        tag = soup.find('meta', attrs={'name': 'description'})
+        if tag and tag.get('content'):
+            return tag.get('content').strip()
+        
+        # OpenGraph description fallback
+        tag = soup.find('meta', attrs={'property': 'og:description'})
+        if tag and tag.get('content'):
+            return tag.get('content').strip()
+            
+        return None
+
+    def _create_content_with_header(self, title: str, url: str, markdown: str, meta_desc: str | None) -> str:
+        """Create final content with header."""
+        header_parts = [
+            f"# {title}",
+            "",
+            f"*Source: {url}*",
+            "",
+            f"*Scraped on: {time.strftime('%Y-%m-%d %H:%M:%S')}*",
+            "",
+            f"*Content length: {len(markdown)} characters*",
+            ""
+        ]
+        
+        if meta_desc:
+            header_parts.extend([f"*Meta description: {meta_desc}*", ""])
+            
+        header_parts.extend(["---", "", ""])
+        
+        return "\n".join(header_parts) + markdown
+
+    def _create_safe_paths(self, url: str, title: str) -> tuple[Path, Path]:
+        """Create safe directory and file paths."""
+        parsed = urlparse(url)
+        domain = parsed.netloc or "unknown-domain"
+        
+        # Normalize domain (strip common www.)
+        if domain.lower().startswith("www."):
+            domain = domain[4:]
+            
+        # Sanitize domain for filesystem
+        safe_domain = re.sub(r'[^\w\-_.]', '-', domain.lower())
+        
+        base_dir = Path.cwd() / self.output_dir / safe_domain
+        base_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create safe filename using configuration
+        safe_name = re.sub(r'[<>:"/\\|?*]', '', title.lower())
+        safe_name = re.sub(r'[^\w\-_.]', '-', safe_name)
+        safe_name = safe_name[:self.config.max_filename_length]
+        
+        filename = base_dir / f"{safe_name}.md"
+        
+        return base_dir, filename
+
+    def _save_files(self, final_content: str, html_source: str, base_dir: Path, filename: Path, title: str) -> None:
+        """Save markdown and optionally HTML files using configuration settings."""
+        # Save markdown file with configured buffer size
+        with open(filename, 'w', encoding='utf-8', buffering=self.config.file_buffer_size) as f:
+            f.write(final_content)
+
+        # Optionally save debug HTML
+        if self.debug_html:
+            safe_name = filename.stem
+            debug_filename = base_dir / f"debug-{safe_name}.html"
+            with open(debug_filename, 'w', encoding='utf-8', buffering=self.config.file_buffer_size) as f:
+                f.write(html_source)
+            print(f"🔍 Debug: {debug_filename}")
+
+    def _show_content_preview(self, final_content: str, filename: Path) -> None:
+        """Show content preview using configuration settings."""
+        print(f"💾 Saved: {filename} ({len(final_content)} characters)")
+        
+        lines = final_content.split('\n')[:self.config.content_preview_lines]
+        print("\n📖 CONTENT PREVIEW:")
+        for i, line in enumerate(lines, 1):
+            if line.strip():
+                preview = line[:self.config.content_preview_width]
+                if len(line) > self.config.content_preview_width:
+                    preview += '...'
+                print(f"   {i:2d}| {preview}")
+        if len(lines) >= self.config.content_preview_lines:
+            print("   ...and more")
 
 
 def main() -> None:
